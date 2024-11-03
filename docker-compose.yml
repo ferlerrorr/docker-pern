@@ -1,54 +1,69 @@
-version: "3"
+version: "3" # Specify the Docker Compose version to use
+
 services:
+  # PostgreSQL database service
   postgres:
-    image: "postgres:latest"
+    image: "postgres:latest" # Use the latest official PostgreSQL image
+    env_file:
+      - ./.env # Load environment variables from the .env file
     environment:
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_USER=${PGUSER} # Optional: set a user
-      - POSTGRES_DB=${PGDATABASE} # Optional: set a default database
-
-  pgadmin:
-    image: "dpage/pgadmin4:latest"
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD} # Set password from .env for security
+      - PGUSER=${PGUSER} # Optional: Username for PostgreSQL, default is "postgres"
+      - PGDATABASE=${PGDATABASE} # Optional: Database name, default is "postgres"
     ports:
-      - "8080:80"
-    depends_on:
-      - postgres
+      - "5432:5432" # Map PostgreSQL default port 5432 to host for external access
 
+  # pgAdmin service for PostgreSQL management
+  pgadmin:
+    image: "dpage/pgadmin4:latest" # Use the latest official pgAdmin image
+    env_file:
+      - ./.env # Load environment variables from the .env file
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL} # Default login email for pgAdmin from .env
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD} # Default password for pgAdmin from .env
+      PGADMIN_LISTEN_PORT: 80 # Internal pgAdmin port (default is 80)
+    ports:
+      - "8080:80" # Map pgAdmin port 80 to host port 8080 for web access
+    depends_on:
+      - postgres # Ensure pgAdmin starts after PostgreSQL service is ready
+
+  # Nginx reverse proxy service
   nginx:
     depends_on:
-      - api
-      - client
-    restart: always
+      - api # Ensure Nginx starts after API service is available
+      - client # Ensure Nginx starts after client service is available
+    restart: always # Restart the Nginx container automatically if it fails
     build:
-      dockerfile: Dockerfile.dev
-      context: ./nginx
+      dockerfile: Dockerfile.dev # Specify a custom Dockerfile for development
+      context: ./nginx # Set build context to the nginx directory
     ports:
-      - "3050:80"
+      - "3050:80" # Map Nginx port 80 to host port 3050 for external access
 
+  # API service configuration
   api:
     build:
-      dockerfile: Dockerfile.dev
-      context: "./server"
+      dockerfile: Dockerfile.dev # Specify custom Dockerfile for API development
+      context: "./server" # Set build context to the server directory
     volumes:
-      - /app/node_modules
-      - ./server:/app
+      - /app/node_modules # Avoid overriding node_modules inside the container
+      - ./server:/app # Bind the local server directory to the /app directory in the container
+    env_file:
+      - ./.env # Load environment variables from the .env file
     environment:
-      - PGUSER=${PGUSER}
-      - PGHOST=postgres
-      - PGDATABASE=${PGDATABASE}
-      - PGPASSWORD=${PGPASSWORD}
-      - PGPORT=${PGPORT}
+      - PGUSER=${PGUSER} # PostgreSQL username from environment variables
+      - PGHOST=postgres # Hostname for PostgreSQL (service name of postgres)
+      - PGDATABASE=${PGDATABASE} # Database name from environment variables
+      - PGPASSWORD=${POSTGRES_PASSWORD} # PostgreSQL password from environment variables
+      - PGPORT=${PGPORT} # PostgreSQL port from environment variables
 
+  # Client application service
   client:
-    stdin_open: true
+    stdin_open: true # Keep STDIN open to support live reloading in development
     environment:
-      - CHOKIDAR_USEPOLLING=${CHOKIDAR_USEPOLLING}
+      - CHOKIDAR_USEPOLLING=${CHOKIDAR_USEPOLLING} # Use polling for file watching (for development)
     build:
-      dockerfile: Dockerfile.dev
-      context: ./client
+      dockerfile: Dockerfile.dev # Specify custom Dockerfile for client development
+      context: ./client # Set build context to the client directory
     volumes:
-      - /app/node_modules
-      - ./client:/app
+      - /app/node_modules # Avoid overriding node_modules in the container
+      - ./client:/app # Bind the local client directory to /app in the container for live reloading
